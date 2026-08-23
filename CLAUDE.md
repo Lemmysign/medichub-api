@@ -378,6 +378,12 @@ question types; ratings/reviews; search & recommendations; the mobile app (separ
 - Browser-direct video upload to Bunny (keeps large files off the server).
 - Paystack subscription + signed webhook drives access.
 - Java 21, Spring Boot 4.1.1, Maven, `application.properties`.
+- **Mock exams** (added post-MVP): standalone, timed, subscriber-only exams **not tied to a course**.
+  Modelled by reusing `Test` with `course` nullable (a mock ⇔ `course == null`) plus `owner`,
+  `published`, and `durationMinutes`. Authored by instructors **and** admins (instructors manage their
+  own; admin manages all); students take them subscriber-gated with a **server-anchored timer** (start
+  creates the attempt, submit is validated against startedAt + duration). Reuses the MCQ
+  question/grading/attempt engine. MCQ-only (no free-text/essay).
 
 ---
 
