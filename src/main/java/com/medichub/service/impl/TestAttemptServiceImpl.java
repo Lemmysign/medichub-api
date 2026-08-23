@@ -65,6 +65,17 @@ public class TestAttemptServiceImpl implements TestAttemptService {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.List<com.medichub.dto.response.TestResponse> listCourseTests(Long courseId) {
+        Long studentId = SecurityUtils.currentUserId();
+        courseService.requirePublishedCourse(courseId);
+        subscriptionAccessService.requireActiveAccess(studentId);
+        return testRepository.findByCourseIdOrderByCreatedAtAsc(courseId).stream()
+                .map(t -> testMapper.toTestResponse(t, questionRepository.countByTestId(t.getId())))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public StudentTestResponse getTestForStudent(Long courseId, Long testId) {
         Long studentId = SecurityUtils.currentUserId();
         courseService.requirePublishedCourse(courseId);

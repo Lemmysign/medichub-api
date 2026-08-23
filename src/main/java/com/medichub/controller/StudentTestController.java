@@ -5,6 +5,7 @@ import com.medichub.dto.response.AttemptDetailResponse;
 import com.medichub.dto.response.AttemptResponse;
 import com.medichub.dto.response.PagedResponse;
 import com.medichub.dto.response.StudentTestResponse;
+import com.medichub.dto.response.TestResponse;
 import com.medichub.service.TestAttemptService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/student/courses/{courseId}/tests")
 public class StudentTestController {
@@ -24,6 +27,11 @@ public class StudentTestController {
 
     public StudentTestController(TestAttemptService testAttemptService) {
         this.testAttemptService = testAttemptService;
+    }
+
+    @GetMapping
+    public List<TestResponse> listTests(@PathVariable Long courseId) {
+        return testAttemptService.listCourseTests(courseId);
     }
 
     @GetMapping("/{testId}")
