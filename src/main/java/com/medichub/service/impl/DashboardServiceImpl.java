@@ -45,7 +45,7 @@ public class DashboardServiceImpl implements DashboardService {
         Long studentId = SecurityUtils.currentUserId();
         return new StudentDashboardResponse(
                 enrollmentRepository.countByStudentId(studentId),
-                testAttemptRepository.countByStudentId(studentId),
+                testAttemptRepository.countByStudentIdAndSubmittedAtIsNotNull(studentId),
                 (int) Math.round(testAttemptRepository.averageScoreByStudent(studentId)),
                 enrollmentRepository.countCompletedCoursesByStudent(studentId));
     }
