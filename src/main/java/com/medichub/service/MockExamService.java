@@ -31,6 +31,9 @@ public interface MockExamService {
 
     QuestionResponse addQuestion(Long mockId, CreateQuestionRequest request);
 
+    /** Append a batch of questions in one transaction (all-or-nothing). */
+    List<QuestionResponse> addQuestionsBulk(Long mockId, List<CreateQuestionRequest> requests);
+
     QuestionResponse updateQuestion(Long mockId, Long questionId, UpdateQuestionRequest request);
 
     void deleteQuestion(Long mockId, Long questionId);

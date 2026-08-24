@@ -87,6 +87,25 @@ public class TestAttemptServiceImpl implements TestAttemptService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public com.medichub.dto.response.CheckAnswerResponse checkAnswer(
+            Long courseId, Long testId, Long questionId, com.medichub.dto.request.CheckAnswerRequest request) {
+        Long studentId = SecurityUtils.currentUserId();
+        courseService.requirePublishedCourse(courseId);
+        subscriptionAccessService.requireActiveAccess(studentId);
+        Test test = requireTest(testId, courseId);
+        if (test.getFeedbackMode() != com.medichub.model.enums.FeedbackMode.IMMEDIATE) {
+            throw new com.medichub.exception.BadRequestException("This test does not reveal answers during the attempt");
+        }
+        Question question = questionRepository.findByIdAndTestId(questionId, testId)
+                .orElseThrow(() -> new ResourceNotFoundException("Question", questionId));
+        boolean correct = isSelectedCorrect(question, request.selectedOptionId());
+        // Course tests are untimed → no pause, no expiry.
+        return new com.medichub.dto.response.CheckAnswerResponse(
+                questionId, correct, firstCorrectOptionId(question), question.getExplanation(), false, null);
+    }
+
+    @Override
     public AttemptDetailResponse submit(Long courseId, Long testId, SubmitTestRequest request) {
         Long studentId = SecurityUtils.currentUserId();
         courseService.requirePublishedCourse(courseId);
@@ -172,6 +191,8 @@ public class TestAttemptServiceImpl implements TestAttemptService {
                         a.getQuestion().getId(),
                         a.getQuestion().getText(),
                         a.getSelectedOption() == null ? null : a.getSelectedOption().getId(),
+                        firstCorrectOptionId(a.getQuestion()),
+                        a.getQuestion().getExplanation(),
                         a.isCorrect()))
                 .toList();
         return new AttemptDetailResponse(
@@ -182,5 +203,21 @@ public class TestAttemptServiceImpl implements TestAttemptService {
                 attempt.getStartedAt(),
                 attempt.getSubmittedAt(),
                 answers);
+    }
+
+    static boolean isSelectedCorrect(Question question, Long selectedOptionId) {
+        if (selectedOptionId == null) {
+            return false;
+        }
+        return question.getOptions().stream()
+                .anyMatch(o -> o.getId().equals(selectedOptionId) && o.isCorrect());
+    }
+
+    static Long firstCorrectOptionId(Question question) {
+        return question.getOptions().stream()
+                .filter(QuestionOption::isCorrect)
+                .map(QuestionOption::getId)
+                .findFirst()
+                .orElse(null);
     }
 }

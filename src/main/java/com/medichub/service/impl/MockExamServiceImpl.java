@@ -1,7 +1,6 @@
 package com.medichub.service.impl;
 
 import com.medichub.dto.request.CreateMockExamRequest;
-import com.medichub.dto.request.CreateOptionRequest;
 import com.medichub.dto.request.CreateQuestionRequest;
 import com.medichub.dto.request.UpdateMockExamRequest;
 import com.medichub.dto.request.UpdateQuestionRequest;
@@ -9,19 +8,18 @@ import com.medichub.dto.response.MockExamResponse;
 import com.medichub.dto.response.PagedResponse;
 import com.medichub.dto.response.QuestionResponse;
 import com.medichub.exception.AccessDeniedException;
-import com.medichub.exception.BadRequestException;
 import com.medichub.exception.ResourceNotFoundException;
 import com.medichub.mapper.TestMapper;
 import com.medichub.model.Question;
-import com.medichub.model.QuestionOption;
 import com.medichub.model.Test;
 import com.medichub.model.User;
-import com.medichub.model.enums.QuestionType;
+import com.medichub.model.enums.FeedbackMode;
 import com.medichub.repository.QuestionRepository;
 import com.medichub.repository.TestRepository;
 import com.medichub.repository.UserRepository;
 import com.medichub.security.SecurityUtils;
 import com.medichub.service.MockExamService;
+import com.medichub.service.QuestionAuthoring;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,8 +54,10 @@ public class MockExamServiceImpl implements MockExamService {
         mock.setTitle(request.title());
         mock.setDescription(request.description());
         mock.setPassMarkPercent(request.passMarkPercent());
-        mock.setDurationMinutes(request.durationMinutes());
+        mock.setDurationMinutes(request.durationMinutes()); // null = untimed
         mock.setPublished(false);
+        // Mocks default to exam-style (reveal only after submission).
+        mock.setFeedbackMode(request.feedbackMode() == null ? FeedbackMode.ON_SUBMISSION : request.feedbackMode());
         mock = testRepository.save(mock);
         return toResponse(mock, 0L);
     }
@@ -68,7 +68,10 @@ public class MockExamServiceImpl implements MockExamService {
         mock.setTitle(request.title());
         mock.setDescription(request.description());
         mock.setPassMarkPercent(request.passMarkPercent());
-        mock.setDurationMinutes(request.durationMinutes());
+        mock.setDurationMinutes(request.durationMinutes()); // null = untimed
+        if (request.feedbackMode() != null) {
+            mock.setFeedbackMode(request.feedbackMode());
+        }
         return toResponse(mock, questionRepository.countByTestId(mockId));
     }
 
@@ -110,14 +113,36 @@ public class MockExamServiceImpl implements MockExamService {
     @Override
     public QuestionResponse addQuestion(Long mockId, CreateQuestionRequest request) {
         Test mock = requireManageable(mockId);
-        validateHasCorrectOption(request.options());
+        var type = QuestionAuthoring.resolveType(request.type());
+        QuestionAuthoring.validate(type, request.options());
         Question question = new Question();
         question.setTest(mock);
         question.setText(request.text());
-        question.setType(request.type() == null ? QuestionType.MULTIPLE_CHOICE : request.type());
+        question.setType(type);
+        question.setExplanation(request.explanation());
         question.setOrderIndex(questionRepository.findMaxOrderIndex(mockId) + 1);
-        applyOptions(question, request.options());
+        QuestionAuthoring.applyOptions(question, request.options());
         return testMapper.toQuestion(questionRepository.save(question));
+    }
+
+    @Override
+    public List<QuestionResponse> addQuestionsBulk(Long mockId, List<CreateQuestionRequest> requests) {
+        Test mock = requireManageable(mockId);
+        int order = questionRepository.findMaxOrderIndex(mockId) + 1;
+        List<QuestionResponse> saved = new java.util.ArrayList<>();
+        for (CreateQuestionRequest request : requests) {
+            var type = QuestionAuthoring.resolveType(request.type());
+            QuestionAuthoring.validate(type, request.options());
+            Question question = new Question();
+            question.setTest(mock);
+            question.setText(request.text());
+            question.setType(type);
+            question.setExplanation(request.explanation());
+            question.setOrderIndex(order++);
+            QuestionAuthoring.applyOptions(question, request.options());
+            saved.add(testMapper.toQuestion(questionRepository.save(question)));
+        }
+        return saved;
     }
 
     @Override
@@ -125,11 +150,12 @@ public class MockExamServiceImpl implements MockExamService {
         requireManageable(mockId);
         Question question = questionRepository.findByIdAndTestId(questionId, mockId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question", questionId));
-        validateHasCorrectOption(request.options());
+        var type = QuestionAuthoring.resolveType(request.type());
+        QuestionAuthoring.validate(type, request.options());
         question.setText(request.text());
-        question.setType(request.type() == null ? QuestionType.MULTIPLE_CHOICE : request.type());
-        question.getOptions().clear();
-        applyOptions(question, request.options());
+        question.setType(type);
+        question.setExplanation(request.explanation());
+        QuestionAuthoring.reconcileOptions(question, request.options()); // in-place: keeps ids referenced by past attempts
         return testMapper.toQuestion(question);
     }
 
@@ -159,24 +185,7 @@ public class MockExamServiceImpl implements MockExamService {
     private MockExamResponse toResponse(Test mock, long questionCount) {
         String ownerName = mock.getOwner() == null ? null : mock.getOwner().getFullName();
         return new MockExamResponse(mock.getId(), mock.getTitle(), mock.getDescription(),
-                mock.getPassMarkPercent(), mock.getDurationMinutes(), mock.isPublished(), ownerName, questionCount);
-    }
-
-    private void validateHasCorrectOption(List<CreateOptionRequest> options) {
-        if (options.stream().noneMatch(o -> Boolean.TRUE.equals(o.correct()))) {
-            throw new BadRequestException("A question must have at least one correct option");
-        }
-    }
-
-    private void applyOptions(Question question, List<CreateOptionRequest> options) {
-        for (int i = 0; i < options.size(); i++) {
-            CreateOptionRequest req = options.get(i);
-            QuestionOption option = new QuestionOption();
-            option.setQuestion(question);
-            option.setText(req.text());
-            option.setCorrect(Boolean.TRUE.equals(req.correct()));
-            option.setOrderIndex(i);
-            question.getOptions().add(option);
-        }
+                mock.getPassMarkPercent(), mock.getDurationMinutes(), mock.isPublished(),
+                mock.getFeedbackMode(), ownerName, questionCount);
     }
 }

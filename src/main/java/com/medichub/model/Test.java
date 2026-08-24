@@ -1,8 +1,11 @@
 package com.medichub.model;
 
+import com.medichub.model.enums.FeedbackMode;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
@@ -63,6 +66,11 @@ public class Test extends BaseEntity {
     /** Visibility for standalone mock exams; ignored for course tests. */
     @Column(nullable = false)
     private boolean published = false;
+
+    /** When correct answers + explanations are revealed to the student. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private FeedbackMode feedbackMode = FeedbackMode.ON_SUBMISSION;
 
     @OneToMany(mappedBy = "test", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")

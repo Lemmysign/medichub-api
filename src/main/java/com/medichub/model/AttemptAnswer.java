@@ -9,6 +9,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 @Getter
 @Setter
@@ -25,8 +27,11 @@ public class AttemptAnswer extends BaseEntity {
     @JoinColumn(name = "question_id", nullable = false)
     private Question question;
 
+    // If the referenced option is later removed (a question edit that drops an option), null this
+    // link rather than block the delete. The attempt's `correct` flag below preserves the score.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "selected_option_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
     private QuestionOption selectedOption;
 
     @Column(nullable = false)

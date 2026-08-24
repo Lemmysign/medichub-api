@@ -40,6 +40,10 @@ public class Question extends BaseEntity {
     @Column(nullable = false)
     private int orderIndex;
 
+    /** Optional explanation of the correct answer, revealed per the test's feedback mode. */
+    @Column(columnDefinition = "text")
+    private String explanation;
+
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")
     private List<QuestionOption> options = new ArrayList<>();

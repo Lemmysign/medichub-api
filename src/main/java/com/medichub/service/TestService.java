@@ -24,6 +24,9 @@ public interface TestService {
 
     QuestionResponse addQuestion(Long courseId, Long testId, CreateQuestionRequest request);
 
+    /** Append a batch of questions in one transaction (all-or-nothing). */
+    List<QuestionResponse> addQuestionsBulk(Long courseId, Long testId, List<CreateQuestionRequest> requests);
+
     QuestionResponse updateQuestion(Long courseId, Long testId, Long questionId, UpdateQuestionRequest request);
 
     void deleteQuestion(Long courseId, Long testId, Long questionId);

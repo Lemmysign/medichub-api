@@ -12,6 +12,7 @@ import java.util.List;
 public record UpdateQuestionRequest(
         @NotBlank @Size(max = 2000) String text,
         QuestionType type,
+        @Size(max = 4000) String explanation,
         @NotEmpty @Size(min = 2, max = 10) @Valid List<CreateOptionRequest> options
 ) {
 }

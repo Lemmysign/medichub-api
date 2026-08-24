@@ -1,5 +1,6 @@
 package com.medichub.controller;
 
+import com.medichub.dto.request.BulkQuestionsRequest;
 import com.medichub.dto.request.CreateQuestionRequest;
 import com.medichub.dto.request.CreateTestRequest;
 import com.medichub.dto.request.UpdateQuestionRequest;
@@ -63,6 +64,13 @@ public class InstructorTestController {
     public ResponseEntity<QuestionResponse> addQuestion(@PathVariable Long courseId, @PathVariable Long testId,
                                                         @Valid @RequestBody CreateQuestionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(testService.addQuestion(courseId, testId, request));
+    }
+
+    @PostMapping("/{testId}/questions/bulk")
+    public ResponseEntity<List<QuestionResponse>> addQuestionsBulk(@PathVariable Long courseId, @PathVariable Long testId,
+                                                                  @Valid @RequestBody BulkQuestionsRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(testService.addQuestionsBulk(courseId, testId, request.questions()));
     }
 
     @PutMapping("/{testId}/questions/{questionId}")

@@ -1,24 +1,22 @@
 package com.medichub.service.impl;
 
-import com.medichub.dto.request.CreateOptionRequest;
 import com.medichub.dto.request.CreateQuestionRequest;
 import com.medichub.dto.request.CreateTestRequest;
 import com.medichub.dto.request.UpdateQuestionRequest;
 import com.medichub.dto.request.UpdateTestRequest;
 import com.medichub.dto.response.QuestionResponse;
 import com.medichub.dto.response.TestResponse;
-import com.medichub.exception.BadRequestException;
 import com.medichub.exception.ResourceNotFoundException;
 import com.medichub.mapper.TestMapper;
 import com.medichub.model.Course;
 import com.medichub.model.Question;
-import com.medichub.model.QuestionOption;
 import com.medichub.model.Test;
-import com.medichub.model.enums.QuestionType;
+import com.medichub.model.enums.FeedbackMode;
 import com.medichub.repository.QuestionRepository;
 import com.medichub.repository.TestRepository;
 import com.medichub.security.SecurityUtils;
 import com.medichub.service.CourseService;
+import com.medichub.service.QuestionAuthoring;
 import com.medichub.service.TestService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +49,8 @@ public class TestServiceImpl implements TestService {
         test.setCourse(course);
         test.setTitle(request.title());
         test.setPassMarkPercent(request.passMarkPercent());
+        // Course tests default to immediate (study-mode) feedback.
+        test.setFeedbackMode(request.feedbackMode() == null ? FeedbackMode.IMMEDIATE : request.feedbackMode());
         test = testRepository.save(test);
         return testMapper.toTestResponse(test, 0L);
     }
@@ -61,6 +61,9 @@ public class TestServiceImpl implements TestService {
         Test test = requireTest(testId, courseId);
         test.setTitle(request.title());
         test.setPassMarkPercent(request.passMarkPercent());
+        if (request.feedbackMode() != null) {
+            test.setFeedbackMode(request.feedbackMode());
+        }
         return testMapper.toTestResponse(test, questionRepository.countByTestId(testId));
     }
 
@@ -92,17 +95,40 @@ public class TestServiceImpl implements TestService {
     public QuestionResponse addQuestion(Long courseId, Long testId, CreateQuestionRequest request) {
         courseService.requireOwnedCourse(courseId, SecurityUtils.currentUserId());
         Test test = requireTest(testId, courseId);
-        validateHasCorrectOption(request.options());
+        var type = QuestionAuthoring.resolveType(request.type());
+        QuestionAuthoring.validate(type, request.options());
 
         Question question = new Question();
         question.setTest(test);
         question.setText(request.text());
-        question.setType(request.type() == null ? QuestionType.MULTIPLE_CHOICE : request.type());
+        question.setType(type);
+        question.setExplanation(request.explanation());
         question.setOrderIndex(questionRepository.findMaxOrderIndex(testId) + 1);
-        applyOptions(question, request.options());
+        QuestionAuthoring.applyOptions(question, request.options());
 
         question = questionRepository.save(question);
         return testMapper.toQuestion(question);
+    }
+
+    @Override
+    public List<QuestionResponse> addQuestionsBulk(Long courseId, Long testId, List<CreateQuestionRequest> requests) {
+        courseService.requireOwnedCourse(courseId, SecurityUtils.currentUserId());
+        Test test = requireTest(testId, courseId);
+        int order = questionRepository.findMaxOrderIndex(testId) + 1;
+        List<QuestionResponse> saved = new java.util.ArrayList<>();
+        for (CreateQuestionRequest request : requests) {
+            var type = QuestionAuthoring.resolveType(request.type());
+            QuestionAuthoring.validate(type, request.options());
+            Question question = new Question();
+            question.setTest(test);
+            question.setText(request.text());
+            question.setType(type);
+            question.setExplanation(request.explanation());
+            question.setOrderIndex(order++);
+            QuestionAuthoring.applyOptions(question, request.options());
+            saved.add(testMapper.toQuestion(questionRepository.save(question)));
+        }
+        return saved;
     }
 
     @Override
@@ -111,12 +137,13 @@ public class TestServiceImpl implements TestService {
         requireTest(testId, courseId);
         Question question = questionRepository.findByIdAndTestId(questionId, testId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question", questionId));
-        validateHasCorrectOption(request.options());
+        var type = QuestionAuthoring.resolveType(request.type());
+        QuestionAuthoring.validate(type, request.options());
 
         question.setText(request.text());
-        question.setType(request.type() == null ? QuestionType.MULTIPLE_CHOICE : request.type());
-        question.getOptions().clear();   // orphanRemoval deletes the old options
-        applyOptions(question, request.options());
+        question.setType(type);
+        question.setExplanation(request.explanation());
+        QuestionAuthoring.reconcileOptions(question, request.options()); // in-place: keeps ids referenced by past attempts
 
         return testMapper.toQuestion(question);
     }
@@ -135,24 +162,5 @@ public class TestServiceImpl implements TestService {
     private Test requireTest(Long testId, Long courseId) {
         return testRepository.findByIdAndCourseId(testId, courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Test", testId));
-    }
-
-    private void validateHasCorrectOption(List<CreateOptionRequest> options) {
-        boolean anyCorrect = options.stream().anyMatch(o -> Boolean.TRUE.equals(o.correct()));
-        if (!anyCorrect) {
-            throw new BadRequestException("A question must have at least one correct option");
-        }
-    }
-
-    private void applyOptions(Question question, List<CreateOptionRequest> options) {
-        for (int i = 0; i < options.size(); i++) {
-            CreateOptionRequest req = options.get(i);
-            QuestionOption option = new QuestionOption();
-            option.setQuestion(question);
-            option.setText(req.text());
-            option.setCorrect(Boolean.TRUE.equals(req.correct()));
-            option.setOrderIndex(i);
-            question.getOptions().add(option);
-        }
     }
 }

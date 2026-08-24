@@ -1,8 +1,10 @@
 package com.medichub.controller;
 
+import com.medichub.dto.request.CheckAnswerRequest;
 import com.medichub.dto.request.SubmitTestRequest;
 import com.medichub.dto.response.AttemptDetailResponse;
 import com.medichub.dto.response.AttemptResponse;
+import com.medichub.dto.response.CheckAnswerResponse;
 import com.medichub.dto.response.PagedResponse;
 import com.medichub.dto.response.StudentTestResponse;
 import com.medichub.dto.response.TestResponse;
@@ -37,6 +39,13 @@ public class StudentTestController {
     @GetMapping("/{testId}")
     public StudentTestResponse getTest(@PathVariable Long courseId, @PathVariable Long testId) {
         return testAttemptService.getTestForStudent(courseId, testId);
+    }
+
+    /** Immediate (study) mode: reveal the correct answer + explanation for one question. */
+    @PostMapping("/{testId}/questions/{questionId}/check")
+    public CheckAnswerResponse check(@PathVariable Long courseId, @PathVariable Long testId,
+                                     @PathVariable Long questionId, @RequestBody CheckAnswerRequest request) {
+        return testAttemptService.checkAnswer(courseId, testId, questionId, request);
     }
 
     @PostMapping("/{testId}/submit")

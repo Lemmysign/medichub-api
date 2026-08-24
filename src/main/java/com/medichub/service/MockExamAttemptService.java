@@ -16,6 +16,16 @@ public interface MockExamAttemptService {
     /** Start (or resume) a timed attempt; the server anchors the clock. */
     MockExamStartResponse start(Long mockId);
 
+    /**
+     * Immediate-mode per-question reveal. For a timed mock, a wrong answer pauses the
+     * server clock (the explanation card is up) until {@link #resume} is called.
+     */
+    com.medichub.dto.response.CheckAnswerResponse checkAnswer(
+            Long mockId, Long attemptId, Long questionId, com.medichub.dto.request.CheckAnswerRequest request);
+
+    /** Resume a paused timed attempt after the student dismisses the explanation card. */
+    MockExamStartResponse resume(Long mockId, Long attemptId);
+
     AttemptDetailResponse submit(Long mockId, Long attemptId, SubmitTestRequest request);
 
     PagedResponse<AttemptResponse> listMyAttempts(Long mockId, Pageable pageable);

@@ -10,6 +10,7 @@ public record QuestionResponse(
         String text,
         QuestionType type,
         int orderIndex,
+        String explanation,
         List<OptionResponse> options
 ) {
 }

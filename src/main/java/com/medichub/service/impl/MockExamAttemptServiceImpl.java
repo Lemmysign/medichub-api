@@ -105,8 +105,8 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
         Instant now = Instant.now();
         if (attempt != null) {
             Instant deadline = deadline(attempt, mock);
-            if (now.isBefore(deadline)) {
-                // Resume the still-running attempt.
+            if (deadline == null || now.isBefore(deadline)) {
+                // Untimed, or still-running timed attempt — resume it.
                 return buildStart(attempt, mock);
             }
             // Stale/expired in-progress attempt with no submission — discard and start fresh.
@@ -176,11 +176,75 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
         return PagedResponse.from(page, testMapper::toAttempt);
     }
 
+    @Override
+    public com.medichub.dto.response.CheckAnswerResponse checkAnswer(
+            Long mockId, Long attemptId, Long questionId, com.medichub.dto.request.CheckAnswerRequest request) {
+        Long studentId = SecurityUtils.currentUserId();
+        subscriptionAccessService.requireActiveAccess(studentId);
+
+        TestAttempt attempt = testAttemptRepository.findByIdAndStudentId(attemptId, studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt", attemptId));
+        Test mock = attempt.getTest();
+        if (mock == null || !mock.getId().equals(mockId)) {
+            throw new BadRequestException("Attempt does not belong to this mock exam");
+        }
+        if (attempt.getSubmittedAt() != null) {
+            throw new BadRequestException("This attempt has already been submitted");
+        }
+        if (mock.getFeedbackMode() != com.medichub.model.enums.FeedbackMode.IMMEDIATE) {
+            throw new BadRequestException("This mock exam does not reveal answers during the attempt");
+        }
+
+        Question question = questionRepository.findByIdAndTestId(questionId, mockId)
+                .orElseThrow(() -> new ResourceNotFoundException("Question", questionId));
+        boolean correct = TestAttemptServiceImpl.isSelectedCorrect(question, request.selectedOptionId());
+
+        // Timed mock + wrong answer → freeze the clock while the explanation card is shown.
+        boolean timed = mock.getDurationMinutes() != null;
+        boolean pause = timed && !correct;
+        if (pause && attempt.getPauseStartedAt() == null) {
+            attempt.setPauseStartedAt(Instant.now());
+            testAttemptRepository.save(attempt);
+        }
+        Instant expiresAt = pause ? null : deadline(attempt, mock);
+        return new com.medichub.dto.response.CheckAnswerResponse(
+                questionId, correct, TestAttemptServiceImpl.firstCorrectOptionId(question),
+                question.getExplanation(), pause, expiresAt);
+    }
+
+    @Override
+    public MockExamStartResponse resume(Long mockId, Long attemptId) {
+        Long studentId = SecurityUtils.currentUserId();
+        subscriptionAccessService.requireActiveAccess(studentId);
+
+        TestAttempt attempt = testAttemptRepository.findByIdAndStudentId(attemptId, studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt", attemptId));
+        Test mock = attempt.getTest();
+        if (mock == null || !mock.getId().equals(mockId)) {
+            throw new BadRequestException("Attempt does not belong to this mock exam");
+        }
+        if (attempt.getSubmittedAt() != null) {
+            throw new BadRequestException("This attempt has already been submitted");
+        }
+        if (attempt.getPauseStartedAt() != null) {
+            long elapsed = Duration.between(attempt.getPauseStartedAt(), Instant.now()).getSeconds();
+            attempt.setPausedSeconds(attempt.getPausedSeconds() + (int) Math.max(0, elapsed));
+            attempt.setPauseStartedAt(null);
+            testAttemptRepository.save(attempt);
+        }
+        return buildStart(attempt, mock);
+    }
+
     // ----------------------------------------------------------------------
 
+    /** Deadline for a timed mock (startedAt + duration + any paused time); null for untimed. */
     private Instant deadline(TestAttempt attempt, Test mock) {
-        int minutes = mock.getDurationMinutes() == null ? 0 : mock.getDurationMinutes();
-        return attempt.getStartedAt().plus(Duration.ofMinutes(minutes));
+        if (mock.getDurationMinutes() == null) {
+            return null;
+        }
+        return attempt.getStartedAt()
+                .plus(Duration.ofMinutes(mock.getDurationMinutes()))
+                .plusSeconds(attempt.getPausedSeconds());
     }
 
     private MockExamStartResponse buildStart(TestAttempt attempt, Test mock) {
@@ -191,6 +255,7 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
                 mock.getTitle(),
                 mock.getPassMarkPercent(),
                 mock.getDurationMinutes(),
+                mock.getFeedbackMode(),
                 attempt.getStartedAt(),
                 deadline(attempt, mock),
                 testMapper.toStudentQuestions(questions));
@@ -212,6 +277,8 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
                         a.getQuestion().getId(),
                         a.getQuestion().getText(),
                         a.getSelectedOption() == null ? null : a.getSelectedOption().getId(),
+                        TestAttemptServiceImpl.firstCorrectOptionId(a.getQuestion()),
+                        a.getQuestion().getExplanation(),
                         a.isCorrect()))
                 .toList();
         return new AttemptDetailResponse(

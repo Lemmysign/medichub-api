@@ -18,6 +18,10 @@ public interface TestAttemptService {
 
     StudentTestResponse getTestForStudent(Long courseId, Long testId);
 
+    /** Immediate-mode per-question reveal (course tests are untimed). */
+    com.medichub.dto.response.CheckAnswerResponse checkAnswer(
+            Long courseId, Long testId, Long questionId, com.medichub.dto.request.CheckAnswerRequest request);
+
     AttemptDetailResponse submit(Long courseId, Long testId, SubmitTestRequest request);
 
     PagedResponse<AttemptResponse> listMyAttempts(Long courseId, Long testId, Pageable pageable);

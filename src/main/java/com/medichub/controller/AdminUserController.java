@@ -25,9 +25,10 @@ public class AdminUserController {
 
     @GetMapping
     public PagedResponse<UserResponse> list(@RequestParam(required = false) Role role,
+                                            @RequestParam(required = false) Boolean enabled,
                                             @RequestParam(required = false) String q,
                                             @PageableDefault(size = 20) Pageable pageable) {
-        return adminUserService.listUsers(role, q, pageable);
+        return adminUserService.listUsers(role, enabled, q, pageable);
     }
 
     @PatchMapping("/{userId}/enabled")

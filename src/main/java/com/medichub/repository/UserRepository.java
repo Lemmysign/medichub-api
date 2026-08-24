@@ -28,10 +28,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("""
             select u from User u
             where (:role is null or u.role = :role)
+              and (:enabled is null or u.enabled = :enabled)
               and (:q = '' or lower(u.fullName) like lower(concat('%', :q, '%'))
                    or lower(u.email) like lower(concat('%', :q, '%')))
             """)
-    Page<User> searchUsers(@Param("role") Role role, @Param("q") String q, Pageable pageable);
+    Page<User> searchUsers(@Param("role") Role role, @Param("enabled") Boolean enabled,
+                           @Param("q") String q, Pageable pageable);
 
     @Query("select u.id from User u where u.enabled = false")
     List<Long> findDisabledUserIds();

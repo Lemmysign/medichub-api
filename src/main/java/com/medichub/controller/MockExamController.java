@@ -1,5 +1,6 @@
 package com.medichub.controller;
 
+import com.medichub.dto.request.BulkQuestionsRequest;
 import com.medichub.dto.request.CreateMockExamRequest;
 import com.medichub.dto.request.CreateQuestionRequest;
 import com.medichub.dto.request.UpdateMockExamRequest;
@@ -79,6 +80,12 @@ public class MockExamController {
     public ResponseEntity<QuestionResponse> addQuestion(@PathVariable Long id,
                                                         @Valid @RequestBody CreateQuestionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(mockExamService.addQuestion(id, request));
+    }
+
+    @PostMapping("/{id}/questions/bulk")
+    public ResponseEntity<List<QuestionResponse>> addQuestionsBulk(@PathVariable Long id,
+                                                                  @Valid @RequestBody BulkQuestionsRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(mockExamService.addQuestionsBulk(id, request.questions()));
     }
 
     @PutMapping("/{id}/questions/{questionId}")

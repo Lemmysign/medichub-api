@@ -36,9 +36,9 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Override
     @Transactional(readOnly = true)
-    public PagedResponse<UserResponse> listUsers(Role role, String query, Pageable pageable) {
+    public PagedResponse<UserResponse> listUsers(Role role, Boolean enabled, String query, Pageable pageable) {
         String q = (query == null || query.isBlank()) ? "" : query.trim();
-        return PagedResponse.from(userRepository.searchUsers(role, q, pageable), userMapper::toResponse);
+        return PagedResponse.from(userRepository.searchUsers(role, enabled, q, pageable), userMapper::toResponse);
     }
 
     @Override

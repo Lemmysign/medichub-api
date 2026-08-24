@@ -49,6 +49,13 @@ public class TestAttempt extends BaseEntity {
 
     private Instant submittedAt;
 
+    /** Accumulated paused time (seconds) for timed mocks in immediate mode; extends the deadline. */
+    @Column(nullable = false)
+    private int pausedSeconds = 0;
+
+    /** Set while an explanation card is open (timer paused); null when running. Server-measured. */
+    private Instant pauseStartedAt;
+
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<AttemptAnswer> answers = new ArrayList<>();
 }
