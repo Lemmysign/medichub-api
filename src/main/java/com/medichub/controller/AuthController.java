@@ -4,8 +4,12 @@ import com.medichub.dto.request.ForgotPasswordRequest;
 import com.medichub.dto.request.LoginRequest;
 import com.medichub.dto.request.RefreshTokenRequest;
 import com.medichub.dto.request.RegisterRequest;
+import com.medichub.dto.request.ResendOtpRequest;
 import com.medichub.dto.request.ResetPasswordRequest;
+import com.medichub.dto.request.VerifyOtpRequest;
 import com.medichub.dto.response.AuthResponse;
+import com.medichub.dto.response.OtpChallengeResponse;
+import com.medichub.dto.response.VerifyOtpResponse;
 import com.medichub.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,8 +35,20 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<OtpChallengeResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    }
+
+    /** Confirm the 6-digit code emailed at registration. */
+    @PostMapping("/verify-otp")
+    public ResponseEntity<VerifyOtpResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        return ResponseEntity.ok(authService.verifyOtp(request));
+    }
+
+    /** Request a fresh verification code. */
+    @PostMapping("/resend-otp")
+    public ResponseEntity<OtpChallengeResponse> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
+        return ResponseEntity.ok(authService.resendOtp(request));
     }
 
     @PostMapping("/login")

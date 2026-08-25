@@ -1,6 +1,7 @@
 package com.medichub.service.impl;
 
 import com.medichub.dto.response.PagedResponse;
+import com.medichub.dto.response.PendingInstructorResponse;
 import com.medichub.dto.response.UserResponse;
 import com.medichub.exception.BadRequestException;
 import com.medichub.exception.ResourceNotFoundException;
@@ -57,5 +58,40 @@ public class AdminUserServiceImpl implements AdminUserService {
             disabledUserRegistry.markEnabled(userId);
         }
         return userMapper.toResponse(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PagedResponse<PendingInstructorResponse> listPendingInstructors(Pageable pageable) {
+        return PagedResponse.from(
+                userRepository.findByRoleAndApprovedFalseAndEnabledTrueOrderByCreatedAtAsc(Role.INSTRUCTOR, pageable),
+                u -> new PendingInstructorResponse(u.getId(), u.getFullName(), u.getEmail(), u.getPhone(),
+                        u.isEmailVerified(), u.getCreatedAt()));
+    }
+
+    @Override
+    public UserResponse approveInstructor(Long userId) {
+        User instructor = requirePendingInstructor(userId);
+        instructor.setApproved(true);
+        return userMapper.toResponse(instructor);
+    }
+
+    @Override
+    public UserResponse rejectInstructor(Long userId) {
+        User instructor = requirePendingInstructor(userId);
+        // Rejection = disable the account; the approval flag stays false.
+        instructor.setEnabled(false);
+        refreshTokenRepository.revokeAllForUser(instructor);
+        disabledUserRegistry.markDisabled(userId);
+        return userMapper.toResponse(instructor);
+    }
+
+    private User requirePendingInstructor(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        if (user.getRole() != Role.INSTRUCTOR) {
+            throw new BadRequestException("This account is not an instructor");
+        }
+        return user;
     }
 }

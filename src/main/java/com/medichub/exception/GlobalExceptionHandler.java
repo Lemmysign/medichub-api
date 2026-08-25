@@ -56,6 +56,18 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, "This account has been disabled", request);
     }
 
+    /** Valid credentials but email not yet confirmed — the SPA routes to the OTP screen on this code. */
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<ErrorResponse> handleEmailNotVerified(EmailNotVerifiedException ex, HttpServletRequest request) {
+        return buildCoded(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", ex.getMessage(), request);
+    }
+
+    /** Verified instructor still awaiting admin approval — the SPA shows the pending screen on this code. */
+    @ExceptionHandler(InstructorNotApprovedException.class)
+    public ResponseEntity<ErrorResponse> handleInstructorPending(InstructorNotApprovedException ex, HttpServletRequest request) {
+        return buildCoded(HttpStatus.FORBIDDEN, "INSTRUCTOR_PENDING", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(PaymentException.class)
     public ResponseEntity<ErrorResponse> handlePayment(PaymentException ex, HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
@@ -87,11 +99,13 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, HttpServletRequest request) {
-        ErrorResponse body = ErrorResponse.of(
-                status.value(),
-                status.getReasonPhrase(),
-                message,
-                request.getRequestURI());
+        return buildCoded(status, status.getReasonPhrase(), message, request);
+    }
+
+    /** Like {@link #build} but with a machine-readable {@code error} code the SPA can branch on. */
+    private ResponseEntity<ErrorResponse> buildCoded(HttpStatus status, String errorCode, String message,
+                                                     HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(status.value(), errorCode, message, request.getRequestURI());
         return ResponseEntity.status(status).body(body);
     }
 }

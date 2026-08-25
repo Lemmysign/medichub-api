@@ -3,14 +3,22 @@ package com.medichub.service.impl;
 import com.medichub.dto.request.ForgotPasswordRequest;
 import com.medichub.dto.request.LoginRequest;
 import com.medichub.dto.request.RegisterRequest;
+import com.medichub.dto.request.ResendOtpRequest;
 import com.medichub.dto.request.ResetPasswordRequest;
+import com.medichub.dto.request.VerifyOtpRequest;
 import com.medichub.dto.response.AuthResponse;
+import com.medichub.dto.response.OtpChallengeResponse;
+import com.medichub.dto.response.VerifyOtpResponse;
 import com.medichub.exception.BadRequestException;
+import com.medichub.exception.EmailNotVerifiedException;
+import com.medichub.exception.InstructorNotApprovedException;
 import com.medichub.mapper.UserMapper;
+import com.medichub.model.EmailVerificationToken;
 import com.medichub.model.PasswordResetToken;
 import com.medichub.model.RefreshToken;
 import com.medichub.model.User;
 import com.medichub.model.enums.Role;
+import com.medichub.repository.EmailVerificationTokenRepository;
 import com.medichub.repository.PasswordResetTokenRepository;
 import com.medichub.repository.RefreshTokenRepository;
 import com.medichub.repository.UserRepository;
@@ -38,10 +46,13 @@ public class AuthServiceImpl implements AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
     private static final Duration RESET_TOKEN_TTL = Duration.ofMinutes(30);
+    private static final Duration OTP_TTL = Duration.ofMinutes(10);
+    private static final int OTP_MAX_ATTEMPTS = 5;
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final AuthenticationManager authenticationManager;
@@ -54,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
     public AuthServiceImpl(UserRepository userRepository,
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordResetTokenRepository passwordResetTokenRepository,
+                           EmailVerificationTokenRepository emailVerificationTokenRepository,
                            PasswordEncoder passwordEncoder,
                            JwtTokenProvider tokenProvider,
                            AuthenticationManager authenticationManager,
@@ -63,6 +75,7 @@ public class AuthServiceImpl implements AuthService {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.authenticationManager = authenticationManager;
@@ -72,19 +85,23 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public AuthResponse register(RegisterRequest request) {
+    public OtpChallengeResponse register(RegisterRequest request) {
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
             throw new BadRequestException("An account with this email already exists");
         }
 
+        Role role = resolveRole(email, request.role());
         User user = new User();
         user.setFullName(request.fullName().trim());
         user.setEmail(email);
         user.setPhone(request.phone());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(resolveRole(email, request.role()));
+        user.setRole(role);
         user.setEnabled(true);
+        user.setEmailVerified(false);
+        // Instructors require admin approval; students and the admin are auto-approved.
+        user.setApproved(role != Role.INSTRUCTOR);
 
         try {
             user = userRepository.save(user);
@@ -92,7 +109,62 @@ public class AuthServiceImpl implements AuthService {
             // Lost the race against a concurrent signup with the same email.
             throw new BadRequestException("An account with this email already exists");
         }
-        return issueTokens(user);
+
+        issueOtp(user);
+        return new OtpChallengeResponse(email, "We've sent a 6-digit verification code to your email.");
+    }
+
+    // noRollbackFor: a wrong/expired code must still persist the burned attempt (rolling back
+    // would reset the attempt counter and defeat the cap).
+    @Override
+    @Transactional(noRollbackFor = BadRequestException.class)
+    public VerifyOtpResponse verifyOtp(VerifyOtpRequest request) {
+        String email = normalizeEmail(request.email());
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadRequestException("Invalid or expired code"));
+
+        if (user.isEmailVerified()) {
+            // Already verified — treat as success and route by approval state.
+            return user.getRole() == Role.INSTRUCTOR && !user.isApproved()
+                    ? VerifyOtpResponse.pending()
+                    : VerifyOtpResponse.loggedIn(issueTokens(user));
+        }
+
+        EmailVerificationToken token = emailVerificationTokenRepository
+                .findFirstByUserAndUsedFalseOrderByCreatedAtDesc(user)
+                .orElseThrow(() -> new BadRequestException("No active code — please request a new one"));
+
+        if (token.getExpiresAt().isBefore(Instant.now())) {
+            token.setUsed(true);
+            throw new BadRequestException("This code has expired — please request a new one");
+        }
+        if (token.getAttempts() >= OTP_MAX_ATTEMPTS) {
+            token.setUsed(true);
+            throw new BadRequestException("Too many attempts — please request a new code");
+        }
+        if (!passwordEncoder.matches(request.code(), token.getCodeHash())) {
+            token.setAttempts(token.getAttempts() + 1);
+            throw new BadRequestException("Incorrect code");
+        }
+
+        token.setUsed(true);
+        user.setEmailVerified(true);
+
+        if (user.getRole() == Role.INSTRUCTOR && !user.isApproved()) {
+            log.info("Instructor userId={} verified email; awaiting admin approval", user.getId());
+            return VerifyOtpResponse.pending();
+        }
+        return VerifyOtpResponse.loggedIn(issueTokens(user));
+    }
+
+    @Override
+    public OtpChallengeResponse resendOtp(ResendOtpRequest request) {
+        String email = normalizeEmail(request.email());
+        // Never reveal whether the email exists or is already verified.
+        userRepository.findByEmail(email)
+                .filter(u -> !u.isEmailVerified())
+                .ifPresent(this::issueOtp);
+        return new OtpChallengeResponse(email, "If that account needs verifying, a new code is on its way.");
     }
 
     @Override
@@ -104,6 +176,14 @@ public class AuthServiceImpl implements AuthService {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadRequestException("Invalid email or password"));
+
+        // Post-credential gates (only reachable with a correct password, so no account-enumeration).
+        if (!user.isEmailVerified()) {
+            throw new EmailNotVerifiedException("Please verify your email to continue");
+        }
+        if (user.getRole() == Role.INSTRUCTOR && !user.isApproved()) {
+            throw new InstructorNotApprovedException("Your instructor account is awaiting admin approval");
+        }
         return issueTokens(user);
     }
 
@@ -178,6 +258,22 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // ----------------------------------------------------------------------
+
+    /** Burns any outstanding code, generates a fresh 6-digit OTP, stores its hash, and emails it. */
+    private void issueOtp(User user) {
+        emailVerificationTokenRepository.invalidateAllForUser(user);
+
+        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setUser(user);
+        token.setCodeHash(passwordEncoder.encode(code));
+        token.setExpiresAt(Instant.now().plus(OTP_TTL));
+        token.setUsed(false);
+        token.setAttempts(0);
+        emailVerificationTokenRepository.save(token);
+
+        emailService.sendOtpEmail(user.getEmail(), code);
+    }
 
     private AuthResponse issueTokens(User user) {
         String accessToken = tokenProvider.generateAccessToken(user);

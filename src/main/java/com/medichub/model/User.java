@@ -40,4 +40,19 @@ public class User extends BaseEntity {
 
     @Column(nullable = false)
     private boolean enabled = true;
+
+    /**
+     * Email confirmed via the 6-digit OTP. New sign-ups start false and cannot log in until verified.
+     * Column default true so accounts that existed before this feature are grandfathered as verified.
+     */
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean emailVerified = false;
+
+    /**
+     * Admin approval gate for instructors. Students/admins are always approved; a new instructor
+     * starts false and cannot log in until an admin approves. Column default true grandfathers
+     * pre-existing accounts.
+     */
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean approved = true;
 }

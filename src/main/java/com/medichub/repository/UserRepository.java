@@ -37,4 +37,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("select u.id from User u where u.enabled = false")
     List<Long> findDisabledUserIds();
+
+    /** Instructors awaiting admin approval (not yet approved, not rejected/disabled), oldest first. */
+    Page<User> findByRoleAndApprovedFalseAndEnabledTrueOrderByCreatedAtAsc(Role role, Pageable pageable);
+
+    long countByRoleAndApprovedFalseAndEnabledTrue(Role role);
 }

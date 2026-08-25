@@ -18,13 +18,17 @@ public class EmailServiceImpl implements EmailService {
     private final JavaMailSender mailSender;
     private final String fromAddress;
     private final String frontendUrl;
+    /** Dev convenience: when true, log OTP codes so they can be read from the console without SMTP. */
+    private final boolean logOtpCodes;
 
     public EmailServiceImpl(JavaMailSender mailSender,
                             @Value("${app.mail.from}") String fromAddress,
-                            @Value("${app.frontend.url}") String frontendUrl) {
+                            @Value("${app.frontend.url}") String frontendUrl,
+                            @Value("${app.otp.log-codes:false}") boolean logOtpCodes) {
         this.mailSender = mailSender;
         this.fromAddress = fromAddress;
         this.frontendUrl = frontendUrl;
+        this.logOtpCodes = logOtpCodes;
     }
 
     /**
@@ -53,6 +57,34 @@ public class EmailServiceImpl implements EmailService {
             log.info("Password reset email sent to {}", toEmail);
         } catch (MailException ex) {
             log.warn("Failed to send password reset email to {}: {}", toEmail, ex.getMessage());
+        }
+    }
+
+    @Override
+    @Async
+    public void sendOtpEmail(String toEmail, String code) {
+        // Dev aid: with no SMTP configured, this lets you read the code from the server console.
+        if (logOtpCodes) {
+            log.info("OTP for {} is {}", toEmail, code);
+        }
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromAddress);
+            message.setTo(toEmail);
+            message.setSubject("Your MedicHub Academy verification code");
+            message.setText("""
+                    Welcome to MedicHub Academy!
+
+                    Your email verification code is: %s
+
+                    Enter it on the verification screen to activate your account. This code expires in 10 minutes.
+
+                    If you did not create an account, you can safely ignore this email.
+                    """.formatted(code));
+            mailSender.send(message);
+            log.info("OTP email sent to {}", toEmail);
+        } catch (MailException ex) {
+            log.warn("Failed to send OTP email to {}: {}", toEmail, ex.getMessage());
         }
     }
 }
