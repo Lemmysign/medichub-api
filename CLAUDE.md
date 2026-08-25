@@ -43,7 +43,7 @@ on the platform for as long as their subscription is active.
 | Migrations | **Flyway** (versioned schema) |
 | Frontend | **React** SPA (built separately) |
 | Video | **Bunny Stream** |
-| File storage | **Cloudflare R2** (S3-compatible; accessed via the AWS S3 SDK for Java) |
+| File storage | **Cloudflare R2** for gated PDFs/materials (S3-compatible, AWS S3 SDK); **Cloudinary** for public images/thumbnails |
 | Payments | **Paystack** (subscriptions) |
 | Email | **Resend or Brevo** (SMTP) |
 | Hosting | **Railway** (Docker), frontend on **Cloudflare Pages / Vercel** |
@@ -114,6 +114,7 @@ Money is stored in **kobo** (`Long`, the smallest Naira unit) to avoid floating-
 - `SubscriptionStatus` — `PENDING`, `ACTIVE`, `EXPIRED`, `CANCELLED`
 - `PaymentStatus` — `PENDING`, `SUCCESS`, `FAILED`
 - `QuestionType` — `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE`
+- `TestKind` — `MCQ`, `RECALL` (only meaningful for standalone tests, i.e. `course == null`)
 
 ### Entities & relationships
 
@@ -252,10 +253,16 @@ subscription**. Browsing the catalog is open; consuming content is gated. Enforc
   MP4 download**, **lock allowed referrers** to our domain. Screen recording is the only gap no web
   platform fully closes; DRM is a later option if needed.
 
-### File storage (Cloudflare R2)
-- Course materials (PDF/DOC) and thumbnails go to R2. R2 is **S3-compatible**, so we use the **AWS
+### File storage (split: R2 for documents, Cloudinary for images)
+- **Course materials (PDF/DOC) → Cloudflare R2**, gated. R2 is **S3-compatible**, so we use the **AWS
   S3 SDK for Java** pointed at the R2 endpoint (`https://<account-id>.r2.cloudflarestorage.com`) with
-  R2 keys. No AWS account involved; R2 free tier is 10 GB.
+  R2 keys. Downloads are served via short-lived **presigned GET URLs** (subscription-gated). No AWS
+  account involved; R2 free tier is 10 GB, zero egress fees.
+- **Course thumbnails / public images → Cloudinary** (`com.cloudinary:cloudinary-http5`). `CloudinaryConfig`
+  builds the client from `CLOUDINARY_*` env vars; `ImageStorageService`/`CloudinaryImageStorageService`
+  uploads with a **stable publicId per course** (`medichub/course-thumbnails/{courseId}`, `overwrite=true`)
+  so re-uploading replaces the previous image, and stores the returned `secure_url` on `Course.thumbnailUrl`.
+  Chosen over R2 for images because Cloudinary gives CDN delivery + on-the-fly transforms/optimization.
 
 ### Payments (Paystack)
 - One subscription **Plan**. Student checks out via Paystack; on success, a **webhook**
@@ -295,8 +302,11 @@ MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD
 # Bunny Stream
 BUNNY_LIBRARY_ID, BUNNY_API_KEY, BUNNY_CDN_HOSTNAME, BUNNY_TOKEN_AUTH_KEY
 
-# Cloudflare R2
+# Cloudflare R2 (gated PDFs/materials)
 R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET, R2_PUBLIC_BASE_URL
+
+# Cloudinary (public images/thumbnails)
+CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 
 # Paystack
 PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, PAYSTACK_PLAN_CODE
@@ -374,7 +384,8 @@ question types; ratings/reviews; search & recommendations; the mobile app (separ
 - One `User` table + `Role` enum (not separate per-role tables).
 - Admin identified by matching `app.admin.email` (no admin self-signup).
 - Subscription unlocks all courses; `Enrollment` tracks engagement/progress per course.
-- Video on Bunny (GUID on topic), materials on R2, text data in Postgres — three stores, never mixed.
+- Video on Bunny (GUID on topic), gated materials on R2, public images/thumbnails on Cloudinary,
+  text data in Postgres — separate stores per media type, never mixed.
 - Browser-direct video upload to Bunny (keeps large files off the server).
 - Paystack subscription + signed webhook drives access.
 - Java 21, Spring Boot 4.1.1, Maven, `application.properties`.
@@ -384,6 +395,23 @@ question types; ratings/reviews; search & recommendations; the mobile app (separ
   own; admin manages all); students take them subscriber-gated with a **server-anchored timer** (start
   creates the attempt, submit is validated against startedAt + duration). Reuses the MCQ
   question/grading/attempt engine. MCQ-only (no free-text/essay).
+- **Taxonomy: Subjects, MCQs & Recalls** (added post-MVP). A `Subject` table (admin-editable CRUD at
+  `/api/admin/subjects`; shared read at `/api/subjects`) holds Dr Sam's core list — seeded on first
+  startup (Pathology, Pharmacology, Community Medicine, Paediatrics, O&G, Medicine, Surgery). Standalone
+  `Test`s now carry a `kind` (`TestKind`: `MCQ` | `RECALL`), a nullable `subject`, and (recalls only) an
+  `examYear`. **MCQs** = the former "mock exams", now subject-tagged (`/api/mock-exams`, student list
+  `/api/student/mock-exams?subjectId=`); MCQs are **taken** as exams via `MockExamAttemptService`
+  (timer/grade/attempt engine). **Recalls** = past-question papers tagged subject + year, but
+  **view-only study material, NOT exams** — no take/timer/submit/pass-fail, and no pass-mark /
+  duration / feedback-mode. Creator: `/api/recalls` (title + subject + year + inline **bulk upload**
+  of questions; question CRUD reuses `MockExamService`). Student: `RecallViewService` at
+  `/api/student/recalls/questions?subjectId=&examYear=` returns a **flat, paginated feed (15/page) of
+  questions with answers revealed + explanation** (`RecallQuestionResponse`), plus
+  `/api/student/recalls/years` for the year filter. React SPA: sidebar renames Mock Exams →
+  **MCQs** and adds **Recalls** (all roles) + **Subjects** (admin). MCQ manage/run pages are
+  parametrised by `basePath`/`kind`; the recall manage page reuses `MockExamManagePage` (recall mode
+  hides exam settings), while the student recall page is a bespoke **dropdown-filtered, view-only
+  scroll** and does not reuse the exam runner.
 
 ---
 

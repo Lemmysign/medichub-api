@@ -31,6 +31,16 @@ public interface CourseCommentRepository extends JpaRepository<CourseComment, Lo
             """)
     Page<CourseComment> findUnansweredRootsByInstructor(@Param("instructorId") Long instructorId, Pageable pageable);
 
+    /** A student's own questions that have received at least one reply, newest reply first (for notifications). */
+    @EntityGraph(attributePaths = {"author", "topic", "course"})
+    @Query("""
+            select c from CourseComment c
+            where c.author.id = :authorId and c.parent is null
+              and exists (select 1 from CourseComment r where r.parent = c)
+            order by (select max(r.createdAt) from CourseComment r where r.parent = c) desc
+            """)
+    Page<CourseComment> findAnsweredRootsByAuthor(@Param("authorId") Long authorId, Pageable pageable);
+
     /** All replies for a set of root comments, oldest first. */
     @EntityGraph(attributePaths = {"author"})
     List<CourseComment> findByParentIdInOrderByCreatedAtAsc(List<Long> parentIds);

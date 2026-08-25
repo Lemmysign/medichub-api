@@ -1,6 +1,11 @@
 package com.medichub.dto.response;
 
-/** Student list item for available mock exams. {@code bestScorePercent} is null if never attempted. */
+import com.medichub.model.enums.TestKind;
+
+/**
+ * Student list item for an available standalone exam (MCQ or Recall).
+ * {@code bestScorePercent} is null if never attempted; {@code examYear} is set only for Recalls.
+ */
 public record MockExamSummaryResponse(
         Long id,
         String title,
@@ -9,6 +14,10 @@ public record MockExamSummaryResponse(
         Integer durationMinutes,
         long questionCount,
         Integer bestScorePercent,
-        long attemptCount
+        long attemptCount,
+        TestKind kind,
+        Long subjectId,
+        String subjectName,
+        Integer examYear
 ) {
 }

@@ -1,10 +1,10 @@
 package com.medichub.controller;
 
 import com.medichub.dto.request.BulkQuestionsRequest;
-import com.medichub.dto.request.CreateMockExamRequest;
 import com.medichub.dto.request.CreateQuestionRequest;
-import com.medichub.dto.request.UpdateMockExamRequest;
+import com.medichub.dto.request.CreateRecallRequest;
 import com.medichub.dto.request.UpdateQuestionRequest;
+import com.medichub.dto.request.UpdateRecallRequest;
 import com.medichub.dto.response.MockExamResponse;
 import com.medichub.dto.response.PagedResponse;
 import com.medichub.dto.response.QuestionResponse;
@@ -28,27 +28,33 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** Creator-side MCQ practice-exam management — instructors and admins. */
+/**
+ * Creator-side Recall management — instructors and admins. Recalls are past-question papers
+ * tagged with a subject and an exam year. The primary authoring path is {@link #create} with
+ * questions supplied inline (bulk upload); question CRUD reuses the shared exam engine.
+ */
 @RestController
-@RequestMapping("/api/mock-exams")
+@RequestMapping("/api/recalls")
 @PreAuthorize("hasAnyRole('INSTRUCTOR','ADMIN')")
-public class MockExamController {
+public class RecallController {
 
     private final MockExamService mockExamService;
 
-    public MockExamController(MockExamService mockExamService) {
+    public RecallController(MockExamService mockExamService) {
         this.mockExamService = mockExamService;
     }
 
+    /** Create a Recall paper, optionally loading its whole question set inline (bulk upload). */
     @PostMapping
-    public ResponseEntity<MockExamResponse> create(@Valid @RequestBody CreateMockExamRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(mockExamService.create(request));
+    public ResponseEntity<MockExamResponse> create(@Valid @RequestBody CreateRecallRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(mockExamService.createRecall(request));
     }
 
     @GetMapping
     public PagedResponse<MockExamResponse> list(@RequestParam(required = false) Long subjectId,
+                                                @RequestParam(required = false) Integer examYear,
                                                 @PageableDefault(size = 20) Pageable pageable) {
-        return mockExamService.listMcqs(subjectId, pageable);
+        return mockExamService.listRecalls(subjectId, examYear, pageable);
     }
 
     @GetMapping("/{id}")
@@ -57,8 +63,8 @@ public class MockExamController {
     }
 
     @PutMapping("/{id}")
-    public MockExamResponse update(@PathVariable Long id, @Valid @RequestBody UpdateMockExamRequest request) {
-        return mockExamService.update(id, request);
+    public MockExamResponse update(@PathVariable Long id, @Valid @RequestBody UpdateRecallRequest request) {
+        return mockExamService.updateRecall(id, request);
     }
 
     @DeleteMapping("/{id}")
@@ -83,9 +89,10 @@ public class MockExamController {
         return ResponseEntity.status(HttpStatus.CREATED).body(mockExamService.addQuestion(id, request));
     }
 
+    /** Append more questions to an existing Recall paper in one batch (bulk upload). */
     @PostMapping("/{id}/questions/bulk")
     public ResponseEntity<List<QuestionResponse>> addQuestionsBulk(@PathVariable Long id,
-                                                                  @Valid @RequestBody BulkQuestionsRequest request) {
+                                                                   @Valid @RequestBody BulkQuestionsRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(mockExamService.addQuestionsBulk(id, request.questions()));
     }
 

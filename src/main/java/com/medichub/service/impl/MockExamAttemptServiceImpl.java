@@ -16,6 +16,7 @@ import com.medichub.model.Question;
 import com.medichub.model.Test;
 import com.medichub.model.TestAttempt;
 import com.medichub.model.User;
+import com.medichub.model.enums.TestKind;
 import com.medichub.repository.QuestionRepository;
 import com.medichub.repository.TestAttemptRepository;
 import com.medichub.repository.TestRepository;
@@ -64,11 +65,16 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
 
     @Override
     @Transactional(readOnly = true)
-    public PagedResponse<MockExamSummaryResponse> listAvailable(Pageable pageable) {
+    public PagedResponse<MockExamSummaryResponse> listAvailableMcqs(Long subjectId, Pageable pageable) {
+        return listAvailable(TestKind.MCQ, subjectId, null, pageable);
+    }
+
+    private PagedResponse<MockExamSummaryResponse> listAvailable(TestKind kind, Long subjectId,
+                                                                 Integer examYear, Pageable pageable) {
         Long studentId = SecurityUtils.currentUserId();
         subscriptionAccessService.requireActiveAccess(studentId);
 
-        Page<Test> page = testRepository.findByCourseIsNullAndPublishedTrueOrderByCreatedAtDesc(pageable);
+        Page<Test> page = testRepository.findAvailable(kind, subjectId, examYear, pageable);
         List<Long> ids = page.getContent().stream().map(Test::getId).toList();
 
         Map<Long, long[]> stats = new HashMap<>(); // testId -> [attemptCount, bestScore]
@@ -78,14 +84,19 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
             }
         }
 
-        return PagedResponse.from(page, mock -> {
-            long[] s = stats.get(mock.getId());
+        return PagedResponse.from(page, test -> {
+            long[] s = stats.get(test.getId());
             Integer best = s == null ? null : (int) s[1];
             long attempts = s == null ? 0 : s[0];
+            var subject = test.getSubject();
             return new MockExamSummaryResponse(
-                    mock.getId(), mock.getTitle(), mock.getDescription(),
-                    mock.getPassMarkPercent(), mock.getDurationMinutes(),
-                    questionRepository.countByTestId(mock.getId()), best, attempts);
+                    test.getId(), test.getTitle(), test.getDescription(),
+                    test.getPassMarkPercent(), test.getDurationMinutes(),
+                    questionRepository.countByTestId(test.getId()), best, attempts,
+                    test.getKind(),
+                    subject == null ? null : subject.getId(),
+                    subject == null ? null : subject.getName(),
+                    test.getExamYear());
         });
     }
 
@@ -141,9 +152,9 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
         Test mock = attempt.getTest();
         List<Question> questions = questionRepository.findByTestIdOrderByOrderIndexAsc(mockId);
 
-        Map<Long, Long> selected = new HashMap<>();
+        Map<Long, List<Long>> selected = new HashMap<>();
         for (AnswerSubmission a : request.answers()) {
-            selected.put(a.questionId(), a.selectedOptionId());
+            selected.put(a.questionId(), a.effectiveSelectedIds());
         }
 
         TestGrader.Result result = TestGrader.grade(mock, questions, selected);
@@ -154,7 +165,9 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
             AttemptAnswer ans = new AttemptAnswer();
             ans.setAttempt(attempt);
             ans.setQuestion(q);
-            ans.setSelectedOption(resolveOption(q, outcome.selectedOptionId()));
+            ans.setSelectedOptionIds(new java.util.LinkedHashSet<>(outcome.selectedOptionIds()));
+            Long first = outcome.selectedOptionIds().stream().findFirst().orElse(null);
+            ans.setSelectedOption(resolveOption(q, first));
             ans.setCorrect(outcome.correct());
             attempt.getAnswers().add(ans);
         }
@@ -197,7 +210,7 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
 
         Question question = questionRepository.findByIdAndTestId(questionId, mockId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question", questionId));
-        boolean correct = TestAttemptServiceImpl.isSelectedCorrect(question, request.selectedOptionId());
+        boolean correct = TestGrader.isSelectionCorrect(question, request.effectiveSelectedIds());
 
         // Timed mock + wrong answer → freeze the clock while the explanation card is shown.
         boolean timed = mock.getDurationMinutes() != null;
@@ -209,6 +222,7 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
         Instant expiresAt = pause ? null : deadline(attempt, mock);
         return new com.medichub.dto.response.CheckAnswerResponse(
                 questionId, correct, TestAttemptServiceImpl.firstCorrectOptionId(question),
+                TestAttemptServiceImpl.allCorrectOptionIds(question),
                 question.getExplanation(), pause, expiresAt);
     }
 
@@ -277,7 +291,9 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
                         a.getQuestion().getId(),
                         a.getQuestion().getText(),
                         a.getSelectedOption() == null ? null : a.getSelectedOption().getId(),
+                        new java.util.ArrayList<>(a.getSelectedOptionIds()),
                         TestAttemptServiceImpl.firstCorrectOptionId(a.getQuestion()),
+                        TestAttemptServiceImpl.allCorrectOptionIds(a.getQuestion()),
                         a.getQuestion().getExplanation(),
                         a.isCorrect()))
                 .toList();

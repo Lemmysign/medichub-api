@@ -51,7 +51,7 @@ class TestGraderTest {
 
     @Test
     void allCorrect_scores100_andPasses() {
-        Map<Long, Long> selected = Map.of(1L, 10L, 2L, 20L, 3L, 30L, 4L, 40L);
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(10L), 2L, List.of(20L), 3L, List.of(30L), 4L, List.of(40L));
 
         TestGrader.Result result = TestGrader.grade(test(50), fourQuestions(), selected);
 
@@ -62,7 +62,7 @@ class TestGraderTest {
 
     @Test
     void noneCorrect_scores0_andFails() {
-        Map<Long, Long> selected = Map.of(1L, 11L, 2L, 21L, 3L, 31L, 4L, 41L);
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(11L), 2L, List.of(21L), 3L, List.of(31L), 4L, List.of(41L));
 
         TestGrader.Result result = TestGrader.grade(test(50), fourQuestions(), selected);
 
@@ -72,7 +72,7 @@ class TestGraderTest {
 
     @Test
     void partial_twoOfFour_is50() {
-        Map<Long, Long> selected = Map.of(1L, 10L, 2L, 20L, 3L, 31L, 4L, 41L);
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(10L), 2L, List.of(20L), 3L, List.of(31L), 4L, List.of(41L));
 
         TestGrader.Result result = TestGrader.grade(test(50), fourQuestions(), selected);
 
@@ -81,7 +81,7 @@ class TestGraderTest {
 
     @Test
     void passBoundary_scoreEqualToPassMarkPasses() {
-        Map<Long, Long> selected = Map.of(1L, 10L, 2L, 20L, 3L, 31L, 4L, 41L); // 50%
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(10L), 2L, List.of(20L), 3L, List.of(31L), 4L, List.of(41L)); // 50%
 
         assertThat(TestGrader.grade(test(50), fourQuestions(), selected).passed()).isTrue();
         assertThat(TestGrader.grade(test(51), fourQuestions(), selected).passed()).isFalse();
@@ -89,10 +89,10 @@ class TestGraderTest {
 
     @Test
     void unansweredQuestion_countsWrong() {
-        Map<Long, Long> selected = new HashMap<>();
-        selected.put(1L, 10L);
-        selected.put(2L, 20L);
-        selected.put(3L, 30L);
+        Map<Long, List<Long>> selected = new HashMap<>();
+        selected.put(1L, List.of(10L));
+        selected.put(2L, List.of(20L));
+        selected.put(3L, List.of(30L));
         // question 4 unanswered
 
         TestGrader.Result result = TestGrader.grade(test(50), fourQuestions(), selected);
@@ -100,13 +100,13 @@ class TestGraderTest {
         assertThat(result.scorePercent()).isEqualTo(75);
         assertThat(result.outcomes()).filteredOn(o -> o.questionId().equals(4L))
                 .singleElement()
-                .matches(o -> !o.correct() && o.selectedOptionId() == null);
+                .matches(o -> !o.correct() && o.selectedOptionIds().isEmpty());
     }
 
     @Test
     void optionFromAnotherQuestion_countsWrong() {
         // For question 1, submit an option id that belongs to question 2.
-        Map<Long, Long> selected = Map.of(1L, 20L, 2L, 20L, 3L, 30L, 4L, 40L);
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(20L), 2L, List.of(20L), 3L, List.of(30L), 4L, List.of(40L));
 
         TestGrader.Result result = TestGrader.grade(test(50), fourQuestions(), selected);
 
@@ -121,5 +121,34 @@ class TestGraderTest {
 
         assertThat(result.scorePercent()).isZero();
         assertThat(result.passed()).isFalse();
+    }
+
+    // --- multiple-choice (multiple correct) ----------------------------------
+
+    /** One question with TWO correct options (10, 11) and one wrong (12). */
+    private static List<Question> multiSelectQuestion() {
+        return List.of(question(1, option(10, "a", true), option(11, "b", true), option(12, "c", false)));
+    }
+
+    @Test
+    void multiSelect_allCorrectSelected_isCorrect() {
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(10L, 11L));
+        TestGrader.Result result = TestGrader.grade(test(50), multiSelectQuestion(), selected);
+        assertThat(result.scorePercent()).isEqualTo(100);
+        assertThat(result.outcomes()).singleElement().matches(TestGrader.QuestionOutcome::correct);
+    }
+
+    @Test
+    void multiSelect_missingOneCorrect_isWrong() {
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(10L)); // only one of two correct
+        assertThat(TestGrader.grade(test(50), multiSelectQuestion(), selected).outcomes())
+                .singleElement().matches(o -> !o.correct());
+    }
+
+    @Test
+    void multiSelect_includesWrongOption_isWrong() {
+        Map<Long, List<Long>> selected = Map.of(1L, List.of(10L, 11L, 12L)); // both correct + a wrong one
+        assertThat(TestGrader.grade(test(50), multiSelectQuestion(), selected).outcomes())
+                .singleElement().matches(o -> !o.correct());
     }
 }

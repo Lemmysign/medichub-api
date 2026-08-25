@@ -16,19 +16,17 @@ import com.medichub.repository.TopicRepository;
 import com.medichub.repository.UserRepository;
 import com.medichub.security.SecurityUtils;
 import com.medichub.service.CourseService;
-import com.medichub.service.StorageService;
+import com.medichub.service.ImageStorageService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 @Transactional
@@ -38,18 +36,18 @@ public class CourseServiceImpl implements CourseService {
     private final TopicRepository topicRepository;
     private final UserRepository userRepository;
     private final CourseMapper courseMapper;
-    private final StorageService storageService;
+    private final ImageStorageService imageStorageService;
 
     public CourseServiceImpl(CourseRepository courseRepository,
                              TopicRepository topicRepository,
                              UserRepository userRepository,
                              CourseMapper courseMapper,
-                             StorageService storageService) {
+                             ImageStorageService imageStorageService) {
         this.courseRepository = courseRepository;
         this.topicRepository = topicRepository;
         this.userRepository = userRepository;
         this.courseMapper = courseMapper;
-        this.storageService = storageService;
+        this.imageStorageService = imageStorageService;
     }
 
     @Override
@@ -72,18 +70,15 @@ public class CourseServiceImpl implements CourseService {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Thumbnail file is required");
         }
-        String originalName = StringUtils.cleanPath(
-                file.getOriginalFilename() == null ? "thumbnail" : file.getOriginalFilename());
-        String key = "thumbnails/%d/%s-%s".formatted(courseId, UUID.randomUUID(),
-                originalName.replaceAll("\\s+", "_"));
         byte[] bytes;
         try {
             bytes = file.getBytes();
         } catch (IOException e) {
             throw new BadRequestException("Could not read uploaded file");
         }
-        storageService.upload(key, bytes, file.getContentType());
-        course.setThumbnailUrl(storageService.publicUrl(key));
+        // Stable publicId per course → re-uploading replaces the previous thumbnail.
+        String publicId = "medichub/course-thumbnails/" + courseId;
+        course.setThumbnailUrl(imageStorageService.uploadImage(publicId, bytes));
         return courseMapper.toResponse(course, topicRepository.countByCourseId(courseId));
     }
 

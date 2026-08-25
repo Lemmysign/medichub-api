@@ -120,6 +120,14 @@ public class CommentServiceImpl implements CommentService {
         return buildThreadPage(roots, null);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public PagedResponse<CommentResponse> listMyAnsweredQuestions(Pageable pageable) {
+        Long studentId = SecurityUtils.currentUserId();
+        Page<CourseComment> roots = commentRepository.findAnsweredRootsByAuthor(studentId, pageable);
+        return buildThreadPage(roots, null);
+    }
+
     // ----------------------------------------------------------------------
 
     /** Attach replies to each root in one extra query (no per-root N+1). */

@@ -99,10 +99,11 @@ public class TestAttemptServiceImpl implements TestAttemptService {
         }
         Question question = questionRepository.findByIdAndTestId(questionId, testId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question", questionId));
-        boolean correct = isSelectedCorrect(question, request.selectedOptionId());
+        boolean correct = TestGrader.isSelectionCorrect(question, request.effectiveSelectedIds());
         // Course tests are untimed → no pause, no expiry.
         return new com.medichub.dto.response.CheckAnswerResponse(
-                questionId, correct, firstCorrectOptionId(question), question.getExplanation(), false, null);
+                questionId, correct, firstCorrectOptionId(question), allCorrectOptionIds(question),
+                question.getExplanation(), false, null);
     }
 
     @Override
@@ -115,9 +116,9 @@ public class TestAttemptServiceImpl implements TestAttemptService {
         List<Question> questions = questionRepository.findByTestIdOrderByOrderIndexAsc(testId);
 
         // Last submission for a given question wins if duplicated.
-        Map<Long, Long> selectedByQuestion = new HashMap<>();
+        Map<Long, List<Long>> selectedByQuestion = new HashMap<>();
         for (AnswerSubmission answer : request.answers()) {
-            selectedByQuestion.put(answer.questionId(), answer.selectedOptionId());
+            selectedByQuestion.put(answer.questionId(), answer.effectiveSelectedIds());
         }
 
         TestGrader.Result result = TestGrader.grade(test, questions, selectedByQuestion);
@@ -140,7 +141,9 @@ public class TestAttemptServiceImpl implements TestAttemptService {
             AttemptAnswer answer = new AttemptAnswer();
             answer.setAttempt(attempt);
             answer.setQuestion(question);
-            answer.setSelectedOption(resolveOption(question, outcome.selectedOptionId()));
+            answer.setSelectedOptionIds(new java.util.LinkedHashSet<>(outcome.selectedOptionIds()));
+            Long first = outcome.selectedOptionIds().stream().findFirst().orElse(null);
+            answer.setSelectedOption(resolveOption(question, first));
             answer.setCorrect(outcome.correct());
             attempt.getAnswers().add(answer);
         }
@@ -191,7 +194,9 @@ public class TestAttemptServiceImpl implements TestAttemptService {
                         a.getQuestion().getId(),
                         a.getQuestion().getText(),
                         a.getSelectedOption() == null ? null : a.getSelectedOption().getId(),
+                        new java.util.ArrayList<>(a.getSelectedOptionIds()),
                         firstCorrectOptionId(a.getQuestion()),
+                        allCorrectOptionIds(a.getQuestion()),
                         a.getQuestion().getExplanation(),
                         a.isCorrect()))
                 .toList();
@@ -205,19 +210,19 @@ public class TestAttemptServiceImpl implements TestAttemptService {
                 answers);
     }
 
-    static boolean isSelectedCorrect(Question question, Long selectedOptionId) {
-        if (selectedOptionId == null) {
-            return false;
-        }
-        return question.getOptions().stream()
-                .anyMatch(o -> o.getId().equals(selectedOptionId) && o.isCorrect());
-    }
-
     static Long firstCorrectOptionId(Question question) {
         return question.getOptions().stream()
                 .filter(QuestionOption::isCorrect)
                 .map(QuestionOption::getId)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Every correct option id — so multiple-choice questions reveal their full answer key. */
+    static List<Long> allCorrectOptionIds(Question question) {
+        return question.getOptions().stream()
+                .filter(QuestionOption::isCorrect)
+                .map(QuestionOption::getId)
+                .toList();
     }
 }

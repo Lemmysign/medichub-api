@@ -19,4 +19,7 @@ public interface CommentService {
 
     /** Instructor view: questions across their courses, optionally only unanswered ones. */
     PagedResponse<CommentResponse> listInstructorQuestions(boolean unansweredOnly, Pageable pageable);
+
+    /** Student view: my questions that have received a reply (newest reply first) — powers notifications. */
+    PagedResponse<CommentResponse> listMyAnsweredQuestions(Pageable pageable);
 }

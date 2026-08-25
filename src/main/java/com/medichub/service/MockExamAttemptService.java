@@ -8,10 +8,11 @@ import com.medichub.dto.response.MockExamSummaryResponse;
 import com.medichub.dto.response.PagedResponse;
 import org.springframework.data.domain.Pageable;
 
-/** Student-side: discover, start (timed), and submit mock exams. Subscription-gated. */
+/** Student-side: discover, start (timed), and submit MCQ practice exams. Subscription-gated. */
 public interface MockExamAttemptService {
 
-    PagedResponse<MockExamSummaryResponse> listAvailable(Pageable pageable);
+    /** Published MCQ practice exams, optionally filtered by subject. */
+    PagedResponse<MockExamSummaryResponse> listAvailableMcqs(Long subjectId, Pageable pageable);
 
     /** Start (or resume) a timed attempt; the server anchors the clock. */
     MockExamStartResponse start(Long mockId);

@@ -2,8 +2,10 @@ package com.medichub.config;
 
 import com.medichub.config.SubscriptionPlanProperties;
 import com.medichub.model.PlatformSettings;
+import com.medichub.model.Subject;
 import com.medichub.model.SubscriptionPlan;
 import com.medichub.repository.PlatformSettingsRepository;
+import com.medichub.repository.SubjectRepository;
 import com.medichub.repository.SubscriptionPlanRepository;
 import com.medichub.repository.UserRepository;
 import com.medichub.security.DisabledUserRegistry;
@@ -57,6 +59,30 @@ public class DataSeeder {
             planRepository.save(plan);
             log.info("Seeded SubscriptionPlan '{}' ({} kobo / {} days)",
                     plan.getName(), plan.getPriceKobo(), plan.getIntervalDays());
+        };
+    }
+
+    /** Seed the taxonomy subjects (Dr Sam's core list) once, in his preferred order. Admin-editable thereafter. */
+    @Bean
+    public ApplicationRunner seedSubjects(SubjectRepository subjectRepository) {
+        return args -> {
+            if (subjectRepository.count() > 0) {
+                return;
+            }
+            List<String> names = List.of(
+                    "Pathology", "Pharmacology", "Community Medicine", "Paediatrics",
+                    "Obstetrics & Gynaecology", "Medicine", "Surgery");
+            int order = 0;
+            for (String name : names) {
+                Subject subject = new Subject();
+                subject.setName(name);
+                subject.setSlug(name.toLowerCase(java.util.Locale.ROOT)
+                        .replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", ""));
+                subject.setOrderIndex(order++);
+                subject.setActive(true);
+                subjectRepository.save(subject);
+            }
+            log.info("Seeded {} taxonomy subjects", names.size());
         };
     }
 
