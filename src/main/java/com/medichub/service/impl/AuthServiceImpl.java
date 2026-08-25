@@ -10,7 +10,6 @@ import com.medichub.mapper.UserMapper;
 import com.medichub.model.PasswordResetToken;
 import com.medichub.model.RefreshToken;
 import com.medichub.model.User;
-import com.medichub.model.enums.AuthProvider;
 import com.medichub.model.enums.Role;
 import com.medichub.repository.PasswordResetTokenRepository;
 import com.medichub.repository.RefreshTokenRepository;
@@ -85,7 +84,6 @@ public class AuthServiceImpl implements AuthService {
         user.setPhone(request.phone());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(resolveRole(email, request.role()));
-        user.setAuthProvider(AuthProvider.LOCAL);
         user.setEnabled(true);
 
         try {

@@ -1,6 +1,5 @@
 package com.medichub.model;
 
-import com.medichub.model.enums.AuthProvider;
 import com.medichub.model.enums.Role;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -31,20 +30,13 @@ public class User extends BaseEntity {
 
     private String phone;
 
-    /** Null for Google-only accounts. BCrypt-hashed for LOCAL accounts. */
+    /** BCrypt-hashed password (email/password is the only auth method). */
     @Column(name = "password_hash")
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private AuthProvider authProvider;
-
-    /** Provider's subject id (e.g. Google sub); null for LOCAL accounts. */
-    private String providerId;
 
     @Column(nullable = false)
     private boolean enabled = true;

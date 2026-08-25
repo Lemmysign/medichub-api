@@ -106,7 +106,7 @@ public class AccountServiceImpl implements AccountService {
     public void changePassword(ChangePasswordRequest request) {
         User user = currentUser();
         if (user.getPasswordHash() == null) {
-            throw new BadRequestException("This account has no password set (Google sign-in)");
+            throw new BadRequestException("This account has no password set");
         }
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new BadRequestException("Current password is incorrect");

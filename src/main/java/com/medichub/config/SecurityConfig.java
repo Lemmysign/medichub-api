@@ -24,9 +24,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * Stateless security (CLAUDE.md §3): no sessions, JWT bearer auth, role-gated
- * paths. Google OAuth2 login is intentionally not wired yet (see
- * {@link com.medichub.security.OAuth2LoginSuccessHandler}).
+ * Stateless security (CLAUDE.md §3): no sessions, JWT bearer auth, role-gated paths.
+ * Authentication is email/password only.
  */
 @Configuration
 @EnableWebSecurity
@@ -65,9 +64,6 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-
-        // TODO(Phase: Google OAuth2): enable .oauth2Login(o -> o.successHandler(oAuth2LoginSuccessHandler))
-        //  once real Google credentials are configured; it must funnel into the same JWT issuance.
 
         return http.build();
     }
