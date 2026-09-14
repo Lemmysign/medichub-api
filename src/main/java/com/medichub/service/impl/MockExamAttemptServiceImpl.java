@@ -101,6 +101,23 @@ public class MockExamAttemptServiceImpl implements MockExamAttemptService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public com.medichub.dto.response.PracticePaperResponse practice(Long mcqId) {
+        Long studentId = SecurityUtils.currentUserId();
+        subscriptionAccessService.requireActiveAccess(studentId);
+
+        Test mcq = testRepository.findByIdAndCourseIsNull(mcqId)
+                .filter(t -> t.getKind() == TestKind.MCQ && t.isPublished())
+                .orElseThrow(() -> new ResourceNotFoundException("MCQ", mcqId));
+
+        List<Question> questions = questionRepository.findByTestIdOrderByOrderIndexAsc(mcqId);
+        return new com.medichub.dto.response.PracticePaperResponse(
+                mcq.getId(), mcq.getTitle(),
+                mcq.getSubject() == null ? null : mcq.getSubject().getName(),
+                testMapper.toQuestions(questions));
+    }
+
+    @Override
     public MockExamStartResponse start(Long mockId) {
         Long studentId = SecurityUtils.currentUserId();
         subscriptionAccessService.requireActiveAccess(studentId);

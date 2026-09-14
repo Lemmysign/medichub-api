@@ -36,6 +36,12 @@ public class StudentMockExamController {
         return mockExamAttemptService.listAvailableMcqs(subjectId, pageable);
     }
 
+    /** Untimed, ungraded practice view of an MCQ paper — answers + explanations revealed. */
+    @GetMapping("/{id}/practice")
+    public com.medichub.dto.response.PracticePaperResponse practice(@PathVariable Long id) {
+        return mockExamAttemptService.practice(id);
+    }
+
     @PostMapping("/{id}/start")
     public MockExamStartResponse start(@PathVariable Long id) {
         return mockExamAttemptService.start(id);

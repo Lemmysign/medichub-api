@@ -17,6 +17,7 @@ public record RecallQuestionResponse(
         String text,
         QuestionType type,
         String explanation,
+        String imageUrl,
         List<OptionResponse> options
 ) {
 }

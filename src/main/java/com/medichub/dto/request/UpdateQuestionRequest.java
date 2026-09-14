@@ -13,6 +13,7 @@ public record UpdateQuestionRequest(
         @NotBlank @Size(max = 2000) String text,
         QuestionType type,
         @Size(max = 4000) String explanation,
+        @Size(max = 1000) String imageUrl,
         @NotEmpty @Size(min = 2, max = 10) @Valid List<CreateOptionRequest> options
 ) {
 }

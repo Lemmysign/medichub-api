@@ -79,6 +79,7 @@ public class RecallViewServiceImpl implements RecallViewService {
                 q.getText(),
                 q.getType(),
                 q.getExplanation(),
+                q.getImageUrl(),
                 options);
     }
 }

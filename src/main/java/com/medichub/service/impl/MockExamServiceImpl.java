@@ -180,6 +180,7 @@ public class MockExamServiceImpl implements MockExamService {
         question.setText(request.text());
         question.setType(type);
         question.setExplanation(request.explanation());
+        question.setImageUrl(request.imageUrl());
         question.setOrderIndex(questionRepository.findMaxOrderIndex(testId) + 1);
         QuestionAuthoring.applyOptions(question, request.options());
         return testMapper.toQuestion(questionRepository.save(question));
@@ -202,6 +203,7 @@ public class MockExamServiceImpl implements MockExamService {
         question.setText(request.text());
         question.setType(type);
         question.setExplanation(request.explanation());
+        question.setImageUrl(request.imageUrl());
         QuestionAuthoring.reconcileOptions(question, request.options()); // in-place: keeps ids referenced by past attempts
         return testMapper.toQuestion(question);
     }
@@ -228,6 +230,7 @@ public class MockExamServiceImpl implements MockExamService {
             question.setText(request.text());
             question.setType(type);
             question.setExplanation(request.explanation());
+        question.setImageUrl(request.imageUrl());
             question.setOrderIndex(order++);
             QuestionAuthoring.applyOptions(question, request.options());
             saved.add(testMapper.toQuestion(questionRepository.save(question)));

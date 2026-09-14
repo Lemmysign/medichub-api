@@ -1,6 +1,7 @@
 package com.medichub.service.impl;
 
 import com.medichub.config.R2Properties;
+import com.medichub.exception.BadRequestException;
 import com.medichub.service.StorageService;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -26,8 +27,16 @@ public class R2StorageService implements StorageService {
         this.props = props;
     }
 
+    private void ensureConfigured() {
+        if (props.accountId() == null || props.accountId().isBlank()
+                || props.accessKey() == null || props.accessKey().isBlank()) {
+            throw new BadRequestException("File storage (Cloudflare R2) is not configured on the server");
+        }
+    }
+
     @Override
     public String upload(String key, byte[] content, String contentType) {
+        ensureConfigured();
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(props.bucket())
                 .key(key)
@@ -56,6 +65,7 @@ public class R2StorageService implements StorageService {
 
     @Override
     public String presignedGetUrl(String key, Duration ttl) {
+        ensureConfigured();
         GetObjectRequest getRequest = GetObjectRequest.builder()
                 .bucket(props.bucket())
                 .key(key)

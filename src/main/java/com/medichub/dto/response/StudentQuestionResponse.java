@@ -9,6 +9,7 @@ public record StudentQuestionResponse(
         String text,
         QuestionType type,
         int orderIndex,
+        String imageUrl,
         List<StudentOptionResponse> options
 ) {
 }

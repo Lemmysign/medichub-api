@@ -11,6 +11,7 @@ public record QuestionResponse(
         QuestionType type,
         int orderIndex,
         String explanation,
+        String imageUrl,
         List<OptionResponse> options
 ) {
 }

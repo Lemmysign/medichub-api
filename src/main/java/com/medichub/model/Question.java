@@ -44,6 +44,10 @@ public class Question extends BaseEntity {
     @Column(columnDefinition = "text")
     private String explanation;
 
+    /** Optional image (Cloudinary secure URL) shown with the question — for image-based questions. */
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("orderIndex ASC")
     private List<QuestionOption> options = new ArrayList<>();

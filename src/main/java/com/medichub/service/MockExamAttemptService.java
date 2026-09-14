@@ -30,4 +30,7 @@ public interface MockExamAttemptService {
     AttemptDetailResponse submit(Long mockId, Long attemptId, SubmitTestRequest request);
 
     PagedResponse<AttemptResponse> listMyAttempts(Long mockId, Pageable pageable);
+
+    /** One published MCQ paper in untimed practice mode (answers + explanations revealed). Gated. */
+    com.medichub.dto.response.PracticePaperResponse practice(Long mcqId);
 }
